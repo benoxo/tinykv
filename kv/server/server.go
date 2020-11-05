@@ -38,22 +38,66 @@ func NewServer(storage storage.Storage) *Server {
 // Raw API.
 func (server *Server) RawGet(_ context.Context, req *kvrpcpb.RawGetRequest) (*kvrpcpb.RawGetResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	resp := &kvrpcpb.RawGetResponse{}
+	reader, err := server.storage.Reader(req.Context)
+	if err != nil {
+		return resp, err
+	}
+	val, err := reader.GetCF(req.Cf, req.Key)
+	resp.Value = val
+	if val == nil {
+		resp.NotFound = true
+	}
+	return resp, nil
 }
 
 func (server *Server) RawPut(_ context.Context, req *kvrpcpb.RawPutRequest) (*kvrpcpb.RawPutResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	resp := &kvrpcpb.RawPutResponse{}
+	var batch []storage.Modify
+	putData := storage.Put{Key: req.Key, Value: req.Value, Cf: req.Cf}
+	batch = append(batch, storage.Modify{Data: putData})
+	err := server.storage.Write(req.Context, batch)
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	return resp, err
 }
 
 func (server *Server) RawDelete(_ context.Context, req *kvrpcpb.RawDeleteRequest) (*kvrpcpb.RawDeleteResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	resp := &kvrpcpb.RawDeleteResponse{}
+	var batch []storage.Modify
+	deleteData := storage.Delete{Key: req.Key, Cf: req.Cf}
+	batch = append(batch, storage.Modify{Data: deleteData})
+	err := server.storage.Write(req.Context, batch)
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	return resp, err
 }
 
 func (server *Server) RawScan(_ context.Context, req *kvrpcpb.RawScanRequest) (*kvrpcpb.RawScanResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	resp := &kvrpcpb.RawScanResponse{}
+	reader, err := server.storage.Reader(req.Context)
+	if err != nil {
+		return resp, err
+	}
+	it := reader.IterCF(req.Cf)
+	it.Seek(req.StartKey)
+	for i := 0; i < int(req.Limit); i++ {
+		if !it.Valid() {
+			break
+		}
+		item := it.Item()
+		pair := &kvrpcpb.KvPair{}
+		pair.Key = item.Key()
+		pair.Value, _ = item.Value()
+		resp.Kvs = append(resp.Kvs, pair)
+		it.Next()
+	}
+	return resp, err
 }
 
 // Raft commands (tinykv <-> tinykv)
