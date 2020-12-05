@@ -13,8 +13,11 @@ import (
 type StandAloneStorage struct {
 	// Your Data Here (1).
 	engine *engine_util.Engines
-	txn    *badger.Txn
-	it     engine_util.DBIterator
+}
+
+type StandAloneStorageReader struct {
+	txn *badger.Txn
+	it  engine_util.DBIterator
 }
 
 func NewStandAloneStorage(conf *config.Config) *StandAloneStorage {
@@ -35,25 +38,11 @@ func (s *StandAloneStorage) Stop() error {
 	return s.engine.Kv.Close()
 }
 
-func (s *StandAloneStorage) GetCF(cf string, key []byte) ([]byte, error) {
-	val, _ := engine_util.GetCF(s.engine.Kv, cf, key)
-	return val, nil
-}
-
-func (s *StandAloneStorage) IterCF(cf string) engine_util.DBIterator {
-	s.txn = s.engine.Kv.NewTransaction(false)
-	s.it = engine_util.NewCFIterator(cf, s.txn)
-	return s.it
-}
-
-func (s *StandAloneStorage) Close() {
-	s.txn.Discard()
-	s.it.Close()
-}
-
 func (s *StandAloneStorage) Reader(ctx *kvrpcpb.Context) (storage.StorageReader, error) {
 	// Your Code Here (1).
-	return s, nil
+	r := &StandAloneStorageReader{}
+	r.txn = s.engine.Kv.NewTransaction(false)
+	return r, nil
 }
 
 func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) error {
@@ -72,4 +61,19 @@ func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) 
 		}
 	}
 	return s.engine.WriteKV(wb)
+}
+
+func (r *StandAloneStorageReader) GetCF(cf string, key []byte) ([]byte, error) {
+	val, _ := engine_util.GetCFFromTxn(r.txn, cf, key)
+	return val, nil
+}
+
+func (r *StandAloneStorageReader) IterCF(cf string) engine_util.DBIterator {
+	r.it = engine_util.NewCFIterator(cf, r.txn)
+	return r.it
+}
+
+func (r *StandAloneStorageReader) Close() {
+	r.txn.Discard()
+	r.it.Close()
 }
